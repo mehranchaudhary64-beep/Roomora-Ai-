@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Primitives
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; } // allow unverified for now just in case email_verified blocks simple oauth
+    
+    // Entity: User
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'tier', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid
+        && data.tier is string && data.tier in ["Explorer (Free)", "Atelier Pro", "Studio Enterprise"]
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+    
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() 
+        && isValidId(userId) 
+        && request.auth.uid == userId 
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().diff({}).affectedKeys().hasOnly(['uid', 'email', 'tier', 'credits', 'createdAt', 'updatedAt']);
+        
+      allow update: if isSignedIn() 
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().updatedAt == request.time
+        && incoming().createdAt == existing().createdAt
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['tier', 'credits', 'updatedAt']);
+      
+      // History Subcollection
+      function isValidHistory(data) {
+        return data.keys().hasAll(['id', 'userId', 'timestamp', 'roomType', 'style', 'beforeImage', 'afterImage', 'prompt', 'report', 'createdAt'])
+          && data.id is string && data.id.size() <= 128
+          && data.userId is string && data.userId == request.auth.uid
+          && data.timestamp is string && data.timestamp.size() <= 64
+          && data.roomType is string && data.roomType.size() <= 128
+          && data.style is string && data.style.size() <= 128
+          && data.beforeImage is string 
+          && data.afterImage is string 
+          && data.prompt is string && data.prompt.size() <= 2000
+          && data.report is map
+          && data.createdAt is timestamp;
+      }
+
+      match /history/{historyId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn()
+          && isValidId(historyId)
+          && request.auth.uid == userId
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidHistory(incoming())
+          && incoming().createdAt == request.time
+          && incoming().id == historyId;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}

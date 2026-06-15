@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User account information and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "tier": { "type": "string", "enum": ["Explorer (Free)", "Atelier Pro", "Studio Enterprise"] },
+        "credits": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "tier", "createdAt", "updatedAt"]
+    },
+    "history": {
+      "title": "Design History",
+      "description": "Information about a generated spatial design",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "roomType": { "type": "string" },
+        "style": { "type": "string" },
+        "beforeImage": { "type": "string" },
+        "afterImage": { "type": "string" },
+        "prompt": { "type": "string" },
+        "report": { "type": "object" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "timestamp", "roomType", "style", "beforeImage", "afterImage", "prompt", "report", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/user" },
+      "description": "Users collection keyed by UID"
+    },
+    "users/{userId}/history/{historyId}": {
+      "schema": { "$ref": "#/entities/history" },
+      "description": "Saved design generations for the user"
+    }
+  }
+}

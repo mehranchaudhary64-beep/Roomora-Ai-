@@ -1,0 +1,6 @@
+{
+  "name": "AI Interior Design",
+  "description": "An ultra-premium, human-centered AI interior design studio and spatial styling application.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
