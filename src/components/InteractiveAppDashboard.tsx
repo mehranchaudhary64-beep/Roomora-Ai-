@@ -18,7 +18,9 @@ import {
   Layout,
   Hammer,
   Camera,
-  Video
+  Video,
+  Undo2,
+  Redo2
 } from "lucide-react";
 import { PRESET_ROOMS, DESIGN_STYLES, SpatialDesignReport, DesignPreset } from "../types";
 import BeforeAfterSlider from "./BeforeAfterSlider";
@@ -93,16 +95,111 @@ const getAnalysisMetrics = (roomType: string, presetId: string): SpatialAnalysis
 };
 
 export default function InteractiveAppDashboard() {
-  // Core config states
-  const [selectedRoomType, setSelectedRoomType] = useState<string>("Living Room");
-  const [selectedStyle, setSelectedStyle] = useState<string>("Scandinavian Modern");
-  const [selectedLighting, setSelectedLighting] = useState<string>("Natural Morning Light");
-  const [selectedMaterials, setSelectedMaterials] = useState<string>("Nordic Oak & Tailored Linen");
-  const [customPrompt, setCustomPrompt] = useState<string>("");
+  // Core config history states
+  interface DesignConfigState {
+    roomType: string;
+    style: string;
+    lighting: string;
+    materials: string;
+    customPrompt: string;
+    presetSelected: string;
+    uploadedImage: string | null;
+  }
 
-  // Upload/Preset states
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [presetSelected, setPresetSelected] = useState<string>("scandinavian_preset");
+  const defaultDesignState: DesignConfigState = {
+    roomType: "Living Room",
+    style: "Scandinavian Modern",
+    lighting: "Natural Morning Light",
+    materials: "Nordic Oak & Tailored Linen",
+    customPrompt: "",
+    presetSelected: "scandinavian_preset",
+    uploadedImage: null
+  };
+
+  const [configHistory, setConfigHistory] = useState<DesignConfigState[]>([defaultDesignState]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const currentConfig = configHistory[historyIndex];
+
+  const updateConfig = (newConfig: Partial<DesignConfigState>) => {
+    setConfigHistory((prev) => {
+      const nextConfig = { ...prev[historyIndex], ...newConfig };
+      // Omit identical duplicate saves
+      if (JSON.stringify(prev[historyIndex]) === JSON.stringify(nextConfig)) {
+        return prev;
+      }
+      const nextHistory = prev.slice(0, historyIndex + 1);
+      nextHistory.push(nextConfig);
+      // Keep up to 6 items (last 5 modifications + original)
+      if (nextHistory.length > 6) {
+        nextHistory.shift();
+      }
+      return nextHistory;
+    });
+    // Need to do this separately since we can't get length outside of setState easily,
+    // actually, we can useEffect
+  };
+
+  // Keep historyIndex in sync after we update the array
+  useEffect(() => {
+    if (historyIndex < configHistory.length - 1 && configHistory.length > 1) {
+       // Only pull index forward if we just appended a new item (which means we sliced and pushed, length is new index + 1)
+       // Wait, if we undo to index 2, then modify, new length is 4. Index should be 3.
+       // It's safer to just set history index directly.
+    }
+  }, [configHistory.length]);
+
+  const setConfigHistoryAndIndex = (newConfig: Partial<DesignConfigState>) => {
+     setConfigHistory((prev) => {
+      const nextConfig = { ...prev[historyIndex], ...newConfig };
+      if (JSON.stringify(prev[historyIndex]) === JSON.stringify(nextConfig)) {
+        return prev;
+      }
+      const nextHistory = prev.slice(0, historyIndex + 1);
+      nextHistory.push(nextConfig);
+      if (nextHistory.length > 6) {
+        nextHistory.shift();
+      }
+      setHistoryIndex(nextHistory.length - 1);
+      return nextHistory;
+    });
+  }
+
+  const undoConfigChange = () => {
+    if (historyIndex > 0) setHistoryIndex(historyIndex - 1);
+  };
+  const redoConfigChange = () => {
+    if (historyIndex < configHistory.length - 1) setHistoryIndex(historyIndex + 1);
+  };
+
+  // Map back values to keep JSX same
+  const selectedRoomType = currentConfig.roomType;
+  const setSelectedRoomType = (v: string) => setConfigHistoryAndIndex({ roomType: v });
+
+  const selectedStyle = currentConfig.style;
+  const setSelectedStyle = (v: string) => setConfigHistoryAndIndex({ style: v });
+
+  const selectedLighting = currentConfig.lighting;
+  const setSelectedLighting = (v: string) => setConfigHistoryAndIndex({ lighting: v });
+
+  const selectedMaterials = currentConfig.materials;
+  const setSelectedMaterials = (v: string) => setConfigHistoryAndIndex({ materials: v });
+
+  const customPrompt = currentConfig.customPrompt;
+  const setCustomPrompt = (v: string) => setConfigHistoryAndIndex({ customPrompt: v });
+
+  const [localCustomPrompt, setLocalCustomPrompt] = useState(customPrompt);
+
+  // Keep local custom prompt in sync when history changes
+  useEffect(() => {
+    setLocalCustomPrompt(customPrompt);
+  }, [customPrompt]);
+
+  const presetSelected = currentConfig.presetSelected;
+  const setPresetSelected = (v: string) => setConfigHistoryAndIndex({ presetSelected: v });
+
+  const uploadedImage = currentConfig.uploadedImage;
+  const setUploadedImage = (v: string | null) => setConfigHistoryAndIndex({ uploadedImage: v });
 
   // Real-time camera capture state
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
@@ -453,16 +550,38 @@ export default function InteractiveAppDashboard() {
         <div className="space-y-6">
           
           {/* Section Indicator */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-luxury-gold animate-pulse" />
-              <span className="text-[10px] font-mono tracking-widest text-luxury-accent uppercase font-bold">
-                STUDIO WORKSPACE
-              </span>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2 h-2 rounded-full bg-luxury-gold animate-pulse" />
+                <span className="text-[10px] font-mono tracking-widest text-luxury-accent uppercase font-bold">
+                  STUDIO WORKSPACE
+                </span>
+              </div>
+              <h3 className="font-display text-xl text-luxury-charcoal tracking-tight">
+                Design Configuration
+              </h3>
             </div>
-            <h3 className="font-display text-xl text-luxury-charcoal tracking-tight">
-              Design Configuration
-            </h3>
+            {activeSubTab === "workspace" && (
+              <div className="flex gap-1">
+                <button 
+                  onClick={undoConfigChange} 
+                  disabled={historyIndex === 0} 
+                  className={`p-1.5 rounded-md transition-colors ${historyIndex === 0 ? "text-luxury-stone cursor-not-allowed" : "text-luxury-slate hover:bg-luxury-stone hover:text-luxury-charcoal"}`}
+                  title="Undo Change"
+                >
+                  <Undo2 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={redoConfigChange} 
+                  disabled={historyIndex === configHistory.length - 1} 
+                  className={`p-1.5 rounded-md transition-colors ${historyIndex === configHistory.length - 1 ? "text-luxury-stone cursor-not-allowed" : "text-luxury-slate hover:bg-luxury-stone hover:text-luxury-charcoal"}`}
+                  title="Redo Change"
+                >
+                  <Redo2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tab Navigation Menu */}
@@ -600,8 +719,9 @@ export default function InteractiveAppDashboard() {
                   05. Customized Request
                 </label>
                 <textarea
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  value={localCustomPrompt}
+                  onChange={(e) => setLocalCustomPrompt(e.target.value)}
+                  onBlur={() => setCustomPrompt(localCustomPrompt)}
                   placeholder="e.g. Include olive trees in stoneware, low travertine table, floor-to-ceiling drapes."
                   rows={3}
                   className="w-full bg-luxury-cream border border-luxury-stone rounded p-2.5 text-xs font-sans text-luxury-charcoal focus:border-luxury-gold focus:outline-none resize-none placeholder-luxury-slate/60"

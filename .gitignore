@@ -6,12 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-logs/
-.nyc_output/
-.cache/
-.turbo/
